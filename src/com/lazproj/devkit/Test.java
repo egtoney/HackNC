@@ -1,21 +1,13 @@
 package com.lazproj.devkit;
 
 
-import java.awt.Color;
 import java.awt.Frame;
-import java.awt.Graphics;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -28,7 +20,6 @@ import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 
-import javax.media.opengl.GL;
 import javax.media.opengl.GL2;
 import javax.media.opengl.GLAutoDrawable;
 import javax.media.opengl.GLCapabilities;
@@ -62,6 +53,8 @@ public class Test {
 
 	protected static ByteBuffer depth_pixels;
 	protected static ByteBuffer loc_pixels;
+	
+	protected static Node previous = new Node(0,0);
 
 	public static void main( String [] args ) {
 		
@@ -228,43 +221,41 @@ public class Test {
                 gl.glReadPixels(0, 0, shadowMapWidth, shadowMapHeight, GL2.GL_DEPTH_COMPONENT , GL2.GL_UNSIGNED_INT, depth_pixels);
                 
                 
-                //Render scene into Frame buffer first
-                gl.glBindFramebuffer(GL2.GL_FRAMEBUFFER, frameBufferId1[0]);
-                gl.glClear(GL2.GL_COLOR_BUFFER_BIT | GL2.GL_DEPTH_BUFFER_BIT);
-            	OneCube.renderPoints( gl, shadowMapWidth, shadowMapHeight );
-            	
-                //Read pixels from buffer
-                gl.glBindFramebuffer(GL2.GL_READ_FRAMEBUFFER, frameBufferId1[0]);
+//                //Render scene into Frame buffer first
+//                gl.glBindFramebuffer(GL2.GL_FRAMEBUFFER, frameBufferId1[0]);
+//                gl.glClear(GL2.GL_COLOR_BUFFER_BIT | GL2.GL_DEPTH_BUFFER_BIT);
+//            	OneCube.renderPoints( gl, shadowMapWidth, shadowMapHeight );
+//            	
+//                //Read pixels from buffer
+//                gl.glBindFramebuffer(GL2.GL_READ_FRAMEBUFFER, frameBufferId1[0]);
 //                //Read pixels 
-                gl.glReadPixels(0, 0, shadowMapWidth, shadowMapHeight, GL2.GL_DEPTH_COMPONENT , GL2.GL_UNSIGNED_INT, loc_pixels);
-//
+//                gl.glReadPixels(0, 0, shadowMapWidth, shadowMapHeight, GL2.GL_DEPTH_COMPONENT , GL2.GL_UNSIGNED_INT, loc_pixels);
+
                 
-//                //Switch back to default FBO
+                //Switch back to default FBO
                 gl.glBindFramebuffer(GL2.GL_FRAMEBUFFER, 0);
                 gl.glClear(GL2.GL_COLOR_BUFFER_BIT | GL2.GL_DEPTH_BUFFER_BIT); 
             	OneCube.render( gl, glautodrawable.getWidth(), glautodrawable.getHeight() );
-//
-//
+
+
+            	gl.glClear(GL2.GL_COLOR_BUFFER_BIT | GL2.GL_DEPTH_BUFFER_BIT); 
 //                //Draw pixels, format has to have only one 
-//              gl.glDrawPixels(shadowMapWidth, shadowMapHeight, GL2.GL_LUMINANCE , GL2.GL_UNSIGNED_INT, depth_pixels);
+              	gl.glDrawPixels(shadowMapWidth, shadowMapHeight, GL2.GL_LUMINANCE , GL2.GL_UNSIGNED_INT, depth_pixels);
 //              gl.glDrawPixels(shadowMapWidth, shadowMapHeight, GL2.GL_LUMINANCE , GL2.GL_UNSIGNED_INT, loc_pixels);
-
-
-//              try {
-//				BufferedWriter out2 = new BufferedWriter( new FileWriter( new File("./output2.out")) );
 	              
             	IntBuffer loc_points = loc_pixels.asIntBuffer();
             	IntBuffer depth_points = depth_pixels.asIntBuffer();
             	
             	int[][] depth_map = new int[250][250];
             	
-            	int visible_points = 0;
+            	
             	HashMap<Integer, Node> vert_points = new HashMap<>();
             	ArrayList<Node> last_col = new ArrayList<>();
             	ArrayList<Node> this_col = new ArrayList<>();
             	
             	final int RANGE = 1000;
             	
+            	// Negative Y Scan
             	float prev_depth = 0;
             	float prev_derivative = 0;
             	Node.connection_count = 0;
@@ -274,13 +265,7 @@ public class Test {
             			int depth_buff = depth_points.get();
             			depth_map[x-1][y] = depth_buff;
             			float derivative = (depth_buff-prev_depth);
-            			int point_buff = loc_points.get();
-//            			if( point_buff != -1 )
-//            				point_buff -= 450000;
-//            			if( point_buff < depth_buff ){
-//                		if( point_buff != -1 ){
             			if( Math.abs(derivative-prev_derivative) > RANGE ){
-            				visible_points++;
             				Node point = new Node(x, y);
             				this_col.add(point);
             			}
@@ -288,26 +273,28 @@ public class Test {
             			prev_derivative = derivative;
             		}
             		
+            		Node last_pt = null;
             		for( Node n : this_col ){
             			for( Node l : last_col ){
             				n.tryToConnect(l);
             			}
+            			if( last_pt != null )
+            				n.tryToConnect(last_pt);
+            			last_pt = n;
+            			
             			vert_points.put(n.x*1000+n.y,n);
             		}
             		last_col.clear();
             		last_col.addAll(this_col);
             		
             	}
-            	
 
             	HashMap<Integer, Node> hor_points = new HashMap<>();
             	ArrayList<Node> last_row = new ArrayList<>();
             	ArrayList<Node> this_row = new ArrayList<>();
             	
             	depth_points.rewind();
-//            	depth_points.flip();
             	loc_points.rewind();
-//            	loc_points.flip();
             	prev_depth = 0;
             	prev_derivative = 0;
             	Node.connection_count = 0;
@@ -315,26 +302,24 @@ public class Test {
             		this_row.clear();
                 	for( int x=0 ; x<250 ; x+=1 ){
             			int depth_buff = depth_map[x][y];
-//            			int depth_buff = depth_points.get();
             			float derivative = (depth_buff-prev_depth);
-            			int point_buff = loc_points.get();
-//            			if( point_buff != -1 )
-//            				point_buff -= 450000;
-//            			if( point_buff < depth_buff ){
-//                		if( point_buff != -1 ){
             			if( Math.abs(derivative-prev_derivative) > RANGE ){
-            				visible_points++;
             				Node point = new Node(x, y);
             				this_row.add(point);
             			}
             			prev_depth = depth_buff;
             			prev_derivative = derivative;
             		}
-            		
+
+            		Node last_pt = null;
             		for( Node n : this_row ){
             			for( Node l : last_row ){
             				n.tryToConnect(l);
             			}
+            			if( last_pt != null )
+            				n.tryToConnect(last_pt);
+            			last_pt = n;
+            			
             			hor_points.put(n.x*1000+n.y,n);
             		}
             		last_row.clear();
@@ -345,7 +330,6 @@ public class Test {
         		HashMap<Integer, Node> points = new HashMap<>();
         		Set<Integer> hor_keys = hor_points.keySet();
         		Set<Integer> vert_keys = vert_points.keySet();
-        		int last_key = 0;
         		
         		for( int h_k : hor_keys ){
         			Node temp = hor_points.get(h_k);
@@ -359,73 +343,45 @@ public class Test {
         		
         		for( int v_k : vert_keys ){
         			points.put( vert_points.get(v_k).x*1000+vert_points.get(v_k).y, vert_points.get(v_k) );
-        			last_key = v_k;
         		}
         		
         		Set<Integer> p_keys = points.keySet();
+        		Node curr_node = null;
+        		float min_distance = Float.MAX_VALUE;
+        		System.out.println(previous.x+" "+previous.y);
         		for( int i : p_keys ){
         			points.get(i).completeGraph();
+        			float distance = previous.sqrdDistance(points.get(i));
+        			if( distance < min_distance ){
+        				curr_node = points.get(i);
+        				min_distance = distance;
+        			}
         		}
-        		
-//        		System.out.println(vert_points.size()+" U "+hor_points.size()+" = "+points.size()+" ("+visible_points+")");
-
-                gl.glClear(GL2.GL_COLOR_BUFFER_BIT | GL2.GL_DEPTH_BUFFER_BIT); 
+        		previous = curr_node;
                 
-                gl.glViewport(0, 0, 250, 250);
+                gl.glViewport(300, 0, 800, 800);
     			
                 gl.glMatrixMode(GL2.GL_MODELVIEW);     // To operate on model-view matrix
  	    		   
                 gl.glLoadIdentity();                 // Reset the model-view matrix
                 gl.glTranslatef(0f, 0.0f, -5.0f);  // Move right and into the screen
- 	    	  gl.glRotatef(0, 1.0f, 1.0f, 1.0f);  // Rotate about (1,1,1)-axis [NEW]
+                gl.glRotatef(0, 1.0f, 1.0f, 1.0f);  // Rotate about (1,1,1)-axis [NEW]
  	    	   
         		gl.glBegin(GL2.GL_POINTS);
         			Set<Integer> keys = points.keySet();
         			for( int i : keys ){
-        				gl.glVertex2d(points.get(i).x/125.0-0.75, points.get(i).y/125.0-0.75);
+        				gl.glVertex2d((points.get(i).x/125.0-0.75), (points.get(i).y/125.0-0.75));
         			}
         		gl.glEnd();
-            	
-//            	String[] parts = temp.split(" ");
-//            	temp += parts[0] + " " + parts[1];
-            	
-//            	ThatClass.data = out;
-//            	System.out.println(out);
-//            	
-//            	System.out.println(points.size() + " " + Node.connection_count);
+        		
         		Node.result = "";
         		Node.visited.clear();
         		Node.recursion_depth = 0;
-            	points.get(last_key).getPath();
+        		curr_node.getPath();
             	System.out.println("len:"+Node.result.length());
             	ThatClass.data = Node.result;
-//            	System.out.println(Node.result);
             	
-//            	try {
-//					BufferedWriter out = new BufferedWriter( new FileWriter( new File("out.out") ) );
-//					out.write(Node.result);
-//					out.flush();
-//					out.close();
-//				} catch (IOException e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
-//            	System.out.println(output);
-//            	ThatClass.data = output;
-//            	ThatClass.data = "0 0 250 0 250 250 0 250 0 0 250 250 0 0";
-            	
-//            	System.out.println(visible_points);
-            	
-//            	out2.flush();
-//            	out2.close();
-//			} catch (IOException e) {
-//				// TODO Auto-generated catch block
-//				e.printStackTrace();
-//			}
-            	
-       	   angleCube -=10* 0.15f;
-//            	
-//            	System.exit(0);
+            	angleCube -=10* 0.15f;
             }
         });
         
@@ -465,6 +421,10 @@ public class Test {
 		public Node( int x, int y ){
 			this.x = x;
 			this.y = y;
+		}
+		
+		public float sqrdDistance(Node node) {
+			return (float) x*node.x + y*node.y;
 		}
 		
 		public void addNeighbors(Node node) {
@@ -546,7 +506,7 @@ public class Test {
 		@Override
 		public void run() {
 //			System.out.println("data:"+data);
-			out.write(data+" -350");
+			out.write(data+"\n");
 			out.flush();
 		}
 			
@@ -633,51 +593,6 @@ public class Test {
             GLU glu = new GLU();
 			glu.gluPerspective(45.0f, aspect, 0.1f, 100.0f);
     	}
-    	
-    	public static void renderPoints(GL2 gl2, int width, int height) {
-			gl2.glViewport(0, 0, width, height);
-			
-			   gl2.glMatrixMode(GL2.GL_MODELVIEW);     // To operate on model-view matrix
-	    		   
-	    	   gl2.glLoadIdentity();                 // Reset the model-view matrix
-	    	   gl2.glTranslatef(0f, 0.0f, -7.0f);  // Move right and into the screen
-	    	   gl2.glRotatef(angleCube, 1.0f, 1.0f, 1.0f);  // Rotate about (1,1,1)-axis [NEW]
-	    	 
-	    	   gl2.glBegin(GL2.GL_POINTS);                // Begin drawing the color cube with 6 quads
-	    	      // Top face (y = 1.0f)
-	    	      // Define vertices in counter-clockwise (CCW) order with normal pointing out
-	    	      gl2.glColor3f(0.0f, 1.0f, 0.0f);     // Green
-	    	      gl2.glVertex3f( 1.0f, 1.0f, -1.0f);
-	    	 
-	    	      // Bottom face (y = -1.0f)
-	    	      gl2.glColor3f(1.0f, 0.5f, 0.0f);     // Orange
-	    	      gl2.glVertex3f( 1.0f, -1.0f,  -1.0f);
-	    	 
-	    	      // Front face  (z = 1.0f)
-	    	      gl2.glColor3f(1.0f, 0.0f, 0.0f);     // Red
-	    	      gl2.glVertex3f( -1.0f,  -1.0f, -1.0f);
-	    	 
-	    	      // Back face (z = -1.0f)
-	    	      gl2.glColor3f(1.0f, 1.0f, 0.0f);     // Yellow
-	    	      gl2.glVertex3f( -1.0f, 1.0f, -1.0f);
-	    	 
-	    	      // Left face (x = -1.0f)
-	    	      gl2.glColor3f(0.0f, 0.0f, 1.0f);     // Blue
-	    	      gl2.glVertex3f( 1.0f, 1.0f, 1.0f);
-	    	 
-	    	      // Right face (x = 1.0f)
-	    	      gl2.glColor3f(1.0f, 0.0f, 1.0f);     // Magenta
-	    	      gl2.glVertex3f( 1.0f, -1.0f,  1.0f);
-	    	 
-	    	      // Left face (x = -1.0f)
-	    	      gl2.glColor3f(0.0f, 0.0f, 1.0f);     // Blue
-	    	      gl2.glVertex3f( -1.0f,  -1.0f, 1.0f);
-	    	 
-	    	      // Right face (x = 1.0f)
-	    	      gl2.glColor3f(1.0f, 0.0f, 1.0f);     // Magenta
-	    	      gl2.glVertex3f( -1.0f, 1.0f, 1.0f);
-	    	   gl2.glEnd();  // End of drawing color-cube
-		}
 
 		protected static void render( GL2 gl2, int width, int height ) {
 			gl2.glViewport(0, 0, width, height);
